@@ -58,26 +58,31 @@ tooltip.className = 'tooltip'
 pinLayer.appendChild(tooltip)
 
 /* =====================
-   SAHNE
+   SCENE
 ===================== */
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x151515)
 
 /* =====================
-   KAMERA
+   CAMERA
 ===================== */
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 3000)
+const camera = new THREE.PerspectiveCamera(
+  45,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  3000
+)
 
 /* =====================
-   RENDER
+   RENDERER
 ===================== */
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.setPixelRatio(1)
 document.body.appendChild(renderer.domElement)
 
 /* =====================
-   IŞIK
+   LIGHT
 ===================== */
 scene.add(new THREE.AmbientLight(0xffffff, 0.9))
 const dir = new THREE.DirectionalLight(0xffffff, 0.6)
@@ -97,11 +102,12 @@ controls.mouseButtons = {
   RIGHT: THREE.MOUSE.DOLLY
 }
 
-
+/* =====================
+   MODEL
+===================== */
 new GLTFLoader().load('./lowpoly.glb', gltf => {
   scene.add(gltf.scene)
 })
-
 
 /* =====================
    INTRO ANIMATION
@@ -172,7 +178,6 @@ pins.forEach(p => {
     camTo.h = p.cam.h
     camTo.target.copy(p.pos)
 
-    // 🔑 SHORTEST ARC FIX (TEK SEFERLİK)
     let delta = camTo.a - camFrom.a
     delta = Math.atan2(Math.sin(delta), Math.cos(delta))
     camTo.a = camFrom.a + delta
@@ -202,23 +207,19 @@ window.addEventListener('resize', () => {
 function animate() {
   requestAnimationFrame(animate)
 
-  // INTRO
   if (introFrame < introDuration) {
     const t = THREE.MathUtils.smoothstep(introFrame / introDuration, 0, 1)
-
     const r = THREE.MathUtils.lerp(introStart.r, introEnd.r, t)
     const a = THREE.MathUtils.lerp(introStart.a, introEnd.a, t)
     const h = THREE.MathUtils.lerp(introStart.h, introEnd.h, t)
 
     camera.position.set(Math.cos(a) * r, h, Math.sin(a) * r)
     camera.lookAt(0, 0, 0)
-
     introFrame++
   } else {
     controls.enabled = true
   }
 
-  // PIN FOCUS
   if (focusT < 1) {
     focusT += 0.015
     const t = THREE.MathUtils.smoothstep(focusT, 0, 1)
@@ -238,7 +239,6 @@ function animate() {
 
   controls.update()
 
-  // PIN + TOOLTIP PROJECTION
   pins.forEach(p => {
     const v = p.pos.clone().project(camera)
     const x = (v.x * 0.5 + 0.5) * window.innerWidth
