@@ -66,12 +66,7 @@ scene.background = new THREE.Color(0x151515)
 /* =====================
    CAMERA
 ===================== */
-const camera = new THREE.PerspectiveCamera(
-  45,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  3000
-)
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 3000)
 
 /* =====================
    RENDERER
@@ -96,11 +91,6 @@ const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
 controls.enabled = false
 controls.target.set(0, 0, 0)
-controls.mouseButtons = {
-  LEFT: THREE.MOUSE.ROTATE,
-  MIDDLE: THREE.MOUSE.PAN,
-  RIGHT: THREE.MOUSE.DOLLY
-}
 
 /* =====================
    MODEL
@@ -110,7 +100,7 @@ new GLTFLoader().load('./lowpoly.glb', gltf => {
 })
 
 /* =====================
-   INTRO
+   INTRO ANIMATION
 ===================== */
 let introFrame = 0
 const introDuration = 160
@@ -118,14 +108,25 @@ const introStart = { r: 520, a: Math.PI * 0.75, h: 260 }
 const introEnd   = { r: 60,  a: Math.PI * 1.15, h: 40 }
 
 /* =====================
-   PINS
+   PIN DATA
 ===================== */
 const pins = [
-  { id: 1, pos: new THREE.Vector3(10, 15, 0), text: 'Merkez Bina' },
-  { id: 2, pos: new THREE.Vector3(-20, 10, 15), text: 'Sosyal Alan' },
-  { id: 3, pos: new THREE.Vector3(15, 8, -20), text: 'Yeşil Bölge' }
+  { id: 1, pos: new THREE.Vector3(10, 15, 0), text: 'Merkez Bina', cam:{ r:80,a:Math.PI*1.25,h:55 }},
+  { id: 2, pos: new THREE.Vector3(-20, 10, 15), text: 'Sosyal Alan', cam:{ r:80,a:Math.PI*1.25,h:55 }},
+  { id: 3, pos: new THREE.Vector3(15, 8, -20), text: 'Yeşil Bölge', cam:{ r:80,a:Math.PI*0.25,h:55 }}
 ]
 
+/* =====================
+   PIN STATE
+===================== */
+let activePin = null
+let focusT = 1
+let camFrom = { r:0,a:0,h:0,target:new THREE.Vector3() }
+let camTo   = { r:0,a:0,h:0,target:new THREE.Vector3() }
+
+/* =====================
+   PIN ELEMENTS
+===================== */
 pins.forEach(p => {
   const el = document.createElement('div')
   el.className = 'pin'
@@ -134,49 +135,78 @@ pins.forEach(p => {
   p.el = el
 
   el.onclick = () => {
+    activePin = p
     tooltip.innerText = p.text
     tooltip.style.display = 'block'
-    setTimeout(() => tooltip.style.display = 'none', 3000)
-  }
-})
 
-/* =====================
-   RESIZE
-===================== */
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight
-  camera.updateProjectionMatrix()
-  renderer.setSize(window.innerWidth, window.innerHeight)
+    camFrom.r = camera.position.distanceTo(controls.target)
+    camFrom.a = Math.atan2(camera.position.z-controls.target.z, camera.position.x-controls.target.x)
+    camFrom.h = camera.position.y
+    camFrom.target.copy(controls.target)
+
+    camTo.r = p.cam.r
+    camTo.a = p.cam.a
+    camTo.h = p.cam.h
+    camTo.target.copy(p.pos)
+
+    let delta = camTo.a - camFrom.a
+    delta = Math.atan2(Math.sin(delta), Math.cos(delta))
+    camTo.a = camFrom.a + delta
+
+    focusT = 0
+
+    clearTimeout(tooltip._t)
+    tooltip._t = setTimeout(()=> {
+      tooltip.style.display = 'none'
+      activePin = null
+    }, 5000)
+  }
 })
 
 /* =====================
    LOOP
 ===================== */
-function animate() {
+function animate(){
   requestAnimationFrame(animate)
 
-  if (introFrame < introDuration) {
-    const t = introFrame / introDuration
-    const r = THREE.MathUtils.lerp(introStart.r, introEnd.r, t)
-    const a = THREE.MathUtils.lerp(introStart.a, introEnd.a, t)
-    const h = THREE.MathUtils.lerp(introStart.h, introEnd.h, t)
-
-    camera.position.set(Math.cos(a) * r, h, Math.sin(a) * r)
-    camera.lookAt(0, 0, 0)
+  if(introFrame < introDuration){
+    const t = THREE.MathUtils.smoothstep(introFrame/introDuration,0,1)
+    camera.position.set(
+      Math.cos(THREE.MathUtils.lerp(introStart.a,introEnd.a,t))*THREE.MathUtils.lerp(introStart.r,introEnd.r,t),
+      THREE.MathUtils.lerp(introStart.h,introEnd.h,t),
+      Math.sin(THREE.MathUtils.lerp(introStart.a,introEnd.a,t))*THREE.MathUtils.lerp(introStart.r,introEnd.r,t)
+    )
+    camera.lookAt(0,0,0)
     introFrame++
   } else {
     controls.enabled = true
   }
 
+  if(focusT < 1){
+    focusT += 0.015
+    const t = THREE.MathUtils.smoothstep(focusT,0,1)
+    controls.target.lerpVectors(camFrom.target, camTo.target, t)
+    camera.position.set(
+      controls.target.x + Math.cos(THREE.MathUtils.lerp(camFrom.a,camTo.a,t))*THREE.MathUtils.lerp(camFrom.r,camTo.r,t),
+      THREE.MathUtils.lerp(camFrom.h,camTo.h,t),
+      controls.target.z + Math.sin(THREE.MathUtils.lerp(camFrom.a,camTo.a,t))*THREE.MathUtils.lerp(camFrom.r,camTo.r,t)
+    )
+  }
+
   controls.update()
 
-  pins.forEach(p => {
-    const v = p.pos.clone().project(camera)
-    p.el.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`
-    p.el.style.top  = `${(-v.y * 0.5 + 0.5) * window.innerHeight}px`
+  pins.forEach(p=>{
+    const v=p.pos.clone().project(camera)
+    const x=(v.x*0.5+0.5)*innerWidth
+    const y=(-v.y*0.5+0.5)*innerHeight
+    p.el.style.left=`${x}px`
+    p.el.style.top=`${y}px`
+    if(activePin===p){
+      tooltip.style.left=`${x}px`
+      tooltip.style.top=`${y}px`
+    }
   })
 
-  renderer.render(scene, camera)
+  renderer.render(scene,camera)
 }
-
 animate()
